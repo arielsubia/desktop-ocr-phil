@@ -80,4 +80,41 @@ def build_stylesheet() -> str:
         QMenu::item:selected {{
             background-color: {ACCENT};
         }}
+        /* Recent captures: dark panel with light text. */
+        QWidget#historyPanel {{
+            background-color: {SURFACE_DARK};
+            border-radius: 8px;
+        }}
+        QLabel#historyTitle {{
+            color: {BG_SECONDARY};
+            font-weight: 600;
+            background: transparent;
+            padding: 2px 2px 6px 2px;
+        }}
+        QListWidget#historyList {{
+            background-color: {SURFACE_DARK};
+            color: {BG_SECONDARY};
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 6px;
+            padding: 2px;
+        }}
+        QListWidget#historyList::item {{
+            padding: 4px 2px;
+            border-radius: 4px;
+        }}
+        QListWidget#historyList::item:hover {{
+            background-color: rgba(255, 255, 255, 0.08);
+        }}
+        QListWidget#historyList::item:selected {{
+            background-color: {ACCENT};
+            color: {BG_SECONDARY};
+        }}
+        /* Extracted text: primary white surface. */
+        QTextEdit#editor {{
+            background-color: {BG_SECONDARY};
+            color: {TEXT_PRIMARY};
+            border: 1px solid {BORDER};
+            border-radius: 8px;
+            padding: 6px;
+        }}
     """

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QGuiApplication, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QSplitter,
     QSystemTrayIcon,
     QTextEdit,
     QVBoxLayout,
@@ -44,7 +45,8 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(str(logo_path())))
-        self.resize(560, 460)
+        self.resize(720, 560)
+        self.setMinimumSize(560, 420)
 
         self._build_ui()
         self._build_tray()
@@ -76,29 +78,26 @@ class MainWindow(QMainWindow):
         self.engine_label = engine_label
         layout.addWidget(engine_label)
 
-        layout.addWidget(QLabel("Recent captures"))
-        self.history_list = QListWidget()
-        self.history_list.itemDoubleClicked.connect(self._copy_selected)
-        layout.addWidget(self.history_list, stretch=1)
-
-        self.preview = QTextEdit()
-        self.preview.setReadOnly(True)
-        self.preview.setPlaceholderText("Extracted text appears here.")
-        self.preview.setFixedHeight(120)
-        layout.addWidget(self.preview)
+        # Two-column body: compact history on the left, the editable text on
+        # the right as the primary area.
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(self._build_history_panel())
+        splitter.addWidget(self._build_editor_panel())
+        # The editor stays the growing pane; the history keeps its width.
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setChildrenCollapsible(False)
+        splitter.setSizes([220, 500])
+        layout.addWidget(splitter, stretch=1)
 
         footer = QHBoxLayout()
         settings_btn = QPushButton("Settings")
         settings_btn.setObjectName("secondary")
         settings_btn.clicked.connect(self.open_settings)
-        clear_btn = QPushButton("Clear history")
-        clear_btn.setObjectName("secondary")
-        clear_btn.clicked.connect(self._clear_history)
         about_btn = QPushButton("About")
         about_btn.setObjectName("secondary")
         about_btn.clicked.connect(self.open_about)
         footer.addWidget(settings_btn)
-        footer.addWidget(clear_btn)
         footer.addStretch()
         footer.addWidget(about_btn)
         layout.addLayout(footer)
@@ -108,6 +107,53 @@ class MainWindow(QMainWindow):
         layout.addWidget(credit, alignment=Qt.AlignmentFlag.AlignRight)
 
         self.setCentralWidget(central)
+
+    def _build_history_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("historyPanel")
+        col = QVBoxLayout(panel)
+        col.setContentsMargins(12, 12, 12, 12)
+        col.setSpacing(8)
+
+        history_label = QLabel("Recent captures")
+        history_label.setObjectName("historyTitle")
+        col.addWidget(history_label, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.history_list = QListWidget()
+        self.history_list.setObjectName("historyList")
+        self.history_list.setMaximumWidth(240)
+        # Clicking an entry loads its text into the editor for review/editing.
+        self.history_list.itemClicked.connect(self._load_selected)
+        col.addWidget(self.history_list, stretch=1)
+
+        clear_btn = QPushButton("Clear history")
+        clear_btn.setObjectName("secondary")
+        clear_btn.clicked.connect(self._clear_history)
+        col.addWidget(clear_btn)
+        return panel
+
+    def _build_editor_panel(self) -> QWidget:
+        panel = QWidget()
+        col = QVBoxLayout(panel)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(6)
+
+        col.addWidget(QLabel("Extracted text"))
+        # The primary area: large and editable so the user can fix anything the
+        # OCR got wrong (e.g. line breaks) before copying it elsewhere.
+        self.editor = QTextEdit()
+        self.editor.setObjectName("editor")
+        self.editor.setReadOnly(False)
+        self.editor.setPlaceholderText("Extracted text appears here. You can edit it.")
+        self.editor.setAcceptRichText(False)
+        col.addWidget(self.editor, stretch=1)
+
+        actions = QHBoxLayout()
+        actions.addStretch()
+        self.copy_btn = QPushButton("Copy")
+        self.copy_btn.clicked.connect(self._copy_editor)
+        actions.addWidget(self.copy_btn)
+        col.addLayout(actions)
+        return panel
 
     def _build_tray(self) -> None:
         self.tray = QSystemTrayIcon(QIcon(str(logo_path())), self)
@@ -159,8 +205,8 @@ class MainWindow(QMainWindow):
     def _on_region_captured(self, image_bytes: bytes) -> None:
         # Bring the window back so the user sees progress and the result.
         self._show_window()
-        self.preview.setPlaceholderText("Extracting text...")
-        self.preview.clear()
+        self.editor.setPlaceholderText("Extracting text...")
+        self.editor.clear()
         self.runner.submit(image_bytes, self.settings)
 
     def _on_ocr_finished(self, text: str, engine: str) -> None:
@@ -168,20 +214,14 @@ class MainWindow(QMainWindow):
         entry = HistoryEntry.create(text=text, engine=engine)
         self.history.add(entry)
         self._refresh_history()
-        self.preview.setPlainText(text or "(no text detected)")
+        self.editor.setPlainText(text or "(no text detected)")
 
-        copied = False
         if self.settings.auto_copy and text:
-            copied = copy_text(text)
-
-        message = f"{entry.line_count} line(s) via {engine}"
-        if copied:
-            message += " - copied to clipboard"
-        self.tray.showMessage(APP_NAME, message, QSystemTrayIcon.MessageIcon.Information)
+            copy_text(text)
 
     def _on_ocr_failed(self, message: str) -> None:
         self.capture_btn.setEnabled(True)
-        self.preview.setPlaceholderText("Extracted text appears here.")
+        self.editor.setPlaceholderText("Extracted text appears here. You can edit it.")
         self._show_window()
         QMessageBox.warning(self, "OCR failed", message)
 
@@ -197,12 +237,27 @@ class MainWindow(QMainWindow):
             item.setData(Qt.ItemDataRole.UserRole, entry.text)
             self.history_list.addItem(item)
 
-    def _copy_selected(self, item: QListWidgetItem) -> None:
+    def _load_selected(self, item: QListWidgetItem) -> None:
+        """Load a history entry into the editor for review and editing."""
         text = item.data(Qt.ItemDataRole.UserRole)
+        if text is not None:
+            self.editor.setPlainText(text)
+
+    def _copy_editor(self) -> None:
+        """Copy the current (possibly edited) editor content to the clipboard."""
+        text = self.editor.toPlainText()
         if text and copy_text(text):
-            self.tray.showMessage(
-                APP_NAME, "Copied to clipboard", QSystemTrayIcon.MessageIcon.Information
-            )
+            self._flash_copied()
+
+    def _flash_copied(self) -> None:
+        """Give brief in-button feedback instead of a system notification."""
+        self.copy_btn.setText("Copied")
+        self.copy_btn.setEnabled(False)
+        QTimer.singleShot(1000, self._reset_copy_button)
+
+    def _reset_copy_button(self) -> None:
+        self.copy_btn.setText("Copy")
+        self.copy_btn.setEnabled(True)
 
     def _clear_history(self) -> None:
         self.history.clear()
