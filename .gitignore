@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# App data / secrets
+*.log
+.env
+history.json
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/

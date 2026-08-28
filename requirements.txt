@@ -1,0 +1,10 @@
+# Runtime dependencies (pinned)
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.0
+PyQt6-sip==13.11.0
+mss==10.2.0
+Pillow==11.3.0
+pytesseract==0.3.13
+pynput==1.7.7
+pyperclip==1.9.0
+boto3==1.42.0
