@@ -1,4 +1,9 @@
-"""Background OCR worker so the UI thread never blocks on capture processing."""
+"""Background OCR worker so the UI thread never blocks on capture processing.
+
+The task keeps a reference to itself alive in the runner until it finishes, so
+the ``QRunnable`` and its signal object are never garbage-collected mid-flight
+(which previously caused a native crash when the result signal crossed threads).
+"""
 
 from __future__ import annotations
 
@@ -42,9 +47,16 @@ class OcrRunner(QObject):
     def __init__(self) -> None:
         super().__init__()
         self._pool = QThreadPool.globalInstance()
+        # Hold strong references to in-flight tasks so neither the QRunnable nor
+        # its signal object is collected while the worker thread is running.
+        self._active: set[_OcrTask] = set()
 
     def submit(self, image_bytes: bytes, settings: Settings) -> None:
         task = _OcrTask(image_bytes, settings)
+        self._active.add(task)
         task.signals.finished.connect(self.finished)
         task.signals.failed.connect(self.failed)
+        # Drop the reference only after the result has been delivered.
+        task.signals.finished.connect(lambda *_: self._active.discard(task))
+        task.signals.failed.connect(lambda *_: self._active.discard(task))
         self._pool.start(task)

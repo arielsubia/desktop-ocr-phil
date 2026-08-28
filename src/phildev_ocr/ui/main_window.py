@@ -140,7 +140,8 @@ class MainWindow(QMainWindow):
     def _wire_signals(self) -> None:
         self.hotkey.triggered.connect(self.trigger_capture)
         self.overlay.region_captured.connect(self._on_region_captured)
-        self.overlay.cancelled.connect(lambda: self.capture_btn.setEnabled(True))
+        self.overlay.cancelled.connect(self._on_capture_cancelled)
+        self.overlay.failed.connect(self._on_ocr_failed)
         self.runner.finished.connect(self._on_ocr_finished)
         self.runner.failed.connect(self._on_ocr_failed)
 
@@ -151,7 +152,13 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
         self.overlay.start()
 
+    def _on_capture_cancelled(self) -> None:
+        self.capture_btn.setEnabled(True)
+        self._show_window()
+
     def _on_region_captured(self, image_bytes: bytes) -> None:
+        # Bring the window back so the user sees progress and the result.
+        self._show_window()
         self.preview.setPlaceholderText("Extracting text...")
         self.preview.clear()
         self.runner.submit(image_bytes, self.settings)
