@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "phildev-desktop-ocr"
 version = "0.1.0"
@@ -9,6 +13,12 @@ license = { text = "Proprietary" }
 
 [project.urls]
 Homepage = "https://github.com/arielsubia/desktop-ocr-phil"
+
+[project.scripts]
+phildev-ocr = "phildev_ocr.app:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.ruff]
 line-length = 100
